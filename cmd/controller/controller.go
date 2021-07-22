@@ -228,7 +228,7 @@ func (c *CmdOpts) startController() error {
 			KubeClientFactory: adminClientFactory,
 		})
 	}
-	if !c.SingleNode {
+	if !c.SingleNode && (!c.DisableControllerManager && !c.DisableScheduler) {
 		componentManager.Add(&controller.Konnectivity{
 			ClusterConfig:     c.ClusterConfig,
 			LogLevel:          c.Logging["konnectivity-server"],
@@ -236,16 +236,20 @@ func (c *CmdOpts) startController() error {
 			KubeClientFactory: adminClientFactory,
 		})
 	}
-	componentManager.Add(&controller.Scheduler{
-		ClusterConfig: c.ClusterConfig,
-		LogLevel:      c.Logging["kube-scheduler"],
-		K0sVars:       c.K0sVars,
-	})
-	componentManager.Add(&controller.Manager{
-		ClusterConfig: c.ClusterConfig,
-		LogLevel:      c.Logging["kube-controller-manager"],
-		K0sVars:       c.K0sVars,
-	})
+	if !c.DisableScheduler {
+		componentManager.Add(&controller.Scheduler{
+			ClusterConfig: c.ClusterConfig,
+			LogLevel:      c.Logging["kube-scheduler"],
+			K0sVars:       c.K0sVars,
+		})
+	}
+	if !c.DisableControllerManager {
+		componentManager.Add(&controller.Manager{
+			ClusterConfig: c.ClusterConfig,
+			LogLevel:      c.Logging["kube-controller-manager"],
+			K0sVars:       c.K0sVars,
+		})
+	}
 
 	// One leader elector per controller
 	var leaderElector controller.LeaderElector
@@ -257,7 +261,7 @@ func (c *CmdOpts) startController() error {
 	componentManager.Add(leaderElector)
 
 	componentManager.Add(&applier.Manager{K0sVars: c.K0sVars, KubeClientFactory: adminClientFactory, LeaderElector: leaderElector})
-	if !c.SingleNode {
+	if !c.SingleNode && (!c.DisableControllerManager && !c.DisableScheduler) {
 		componentManager.Add(&controller.K0SControlAPI{
 			ConfigPath: c.CfgFile,
 			K0sVars:    c.K0sVars,
@@ -280,9 +284,11 @@ func (c *CmdOpts) startController() error {
 		))
 	}
 
-	componentManager.Add(controller.NewCSRApprover(c.ClusterConfig,
-		leaderElector,
-		adminClientFactory))
+	if !c.DisableControllerManager && !c.DisableScheduler {
+		componentManager.Add(controller.NewCSRApprover(c.ClusterConfig,
+			leaderElector,
+			adminClientFactory))
+	}
 
 	if c.EnableK0sCloudProvider {
 		componentManager.Add(
@@ -330,24 +336,27 @@ func (c *CmdOpts) startController() error {
 		ch <- syscall.SIGTERM
 	}
 
-	// in-cluster component reconcilers
-	reconcilers, err := c.createClusterReconcilers(adminClientFactory, leaderElector)
-	if err != nil {
-		return err
-	}
-
-	perfTimer.Checkpoint("starting-reconcilers")
-
-	// Start all reconcilers
-	for name, reconciler := range reconcilers {
-		logrus.Infof("running reconciler: %s", name)
-		// TODO: check shadowing
-		if err = reconciler.Run(); err != nil {
-			logrus.Errorf("failed to start reconciler: %s", err.Error())
+	reconcilers := map[string]component.Component{}
+	if !c.DisableControllerManager && !c.DisableScheduler {
+		// in-cluster component reconcilers
+		reconcilers, err := c.createClusterReconcilers(adminClientFactory, leaderElector)
+		if err != nil {
+			return err
 		}
-	}
 
-	perfTimer.Checkpoint("started-reconcilers")
+		perfTimer.Checkpoint("starting-reconcilers")
+
+		// Start all reconcilers
+		for name, reconciler := range reconcilers {
+			logrus.Infof("running reconciler: %s", name)
+			// TODO: check shadowing
+			if err = reconciler.Run(); err != nil {
+				logrus.Errorf("failed to start reconciler: %s", err.Error())
+			}
+		}
+
+		perfTimer.Checkpoint("started-reconcilers")
+	}
 
 	if err == nil && c.EnableWorker {
 		perfTimer.Checkpoint("starting-worker")

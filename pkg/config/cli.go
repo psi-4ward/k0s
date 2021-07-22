@@ -53,8 +53,10 @@ type CLIOptions struct {
 
 // Shared controller cli flags
 type ControllerOptions struct {
-	EnableWorker bool
-	SingleNode   bool
+	EnableWorker             bool
+	SingleNode               bool
+	DisableControllerManager bool
+	DisableScheduler         bool
 
 	EnableK0sCloudProvider          bool
 	K0sCloudProviderUpdateFrequency time.Duration
@@ -135,6 +137,8 @@ func GetControllerFlags() *pflag.FlagSet {
 
 	flagset.StringVar(&workerOpts.WorkerProfile, "profile", "default", "worker profile to use on the node")
 	flagset.BoolVar(&controllerOpts.EnableWorker, "enable-worker", false, "enable worker (default false)")
+	flagset.BoolVar(&controllerOpts.DisableControllerManager, "disable-controller-manager", false, "disable controller-manager (default false)")
+	flagset.BoolVar(&controllerOpts.DisableScheduler, "disable-scheduler", false, "disable scheduler (default false)")
 	flagset.StringVar(&workerOpts.TokenFile, "token-file", "", "Path to the file containing join-token.")
 	flagset.StringToStringVarP(&workerOpts.CmdLogLevels, "logging", "l", DefaultLogLevels(), "Logging Levels for the different components")
 	flagset.BoolVar(&controllerOpts.SingleNode, "single", false, "enable single node (implies --enable-worker, default false)")

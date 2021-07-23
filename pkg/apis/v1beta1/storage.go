@@ -19,8 +19,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/k0sproject/k0s/internal/util"
 	"github.com/k0sproject/k0s/pkg/constant"
+
+	"github.com/k0sproject/k0s/internal/util"
 	"github.com/sirupsen/logrus"
 )
 
@@ -48,11 +49,12 @@ type KineConfig struct {
 }
 
 // DefaultStorageSpec creates StorageSpec with sane defaults
-func DefaultStorageSpec(k0sVars constant.CfgVars) *StorageSpec {
+func DefaultStorageSpec(dataDir string) *StorageSpec {
+	k0sVars := constant.GetConfig(dataDir)
 	if k0sVars.DefaultStorageType == KineStorageType {
 		return &StorageSpec{
 			Type: KineStorageType,
-			Kine: DefaultKineConfig(k0sVars.DataDir),
+			Kine: DefaultKineConfig(dataDir),
 		}
 	}
 	return &StorageSpec{
